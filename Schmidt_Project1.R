@@ -658,89 +658,8 @@ wilcox_betaproteos2 <- wilcox.test(part_betaproteos$SeqAbundance, free_betaprote
 
 
 
-#Remove the Phyla that cause infs, -Inf, and Nans
-#means <- means[-31, ] #Remove Dictoglomi
-#means <- means[-26, ]# Candidate_division_TM7
-#means <- means[-24, ]# Candidate_division_OP8
-#means <- means[-22, ]# Candidate_division_OP11
-#means <- means[-15, ]# Thermotogae
-
-
-
-ddply(means, function(x) with(x,wilcox.test(Particle_MeanAbund,Free_MeanAbund))$p.value)
 
 
 
 
 
-
-group.pairs <- combn(unique(df$group),2,simplify=FALSE)
-# this loops over the 2nd margin - the columns - of df and makes each column
-# available as x
-apply(df[-1], 2, function(x)
-  # this loops over the list of group pairs and makes each such pair
-  # available as an integer vector y
-  lapply(group.pairs, function(y)
-    wilcox.test(x[df$group %in% y],df$group[df$group %in% y])))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### This stuff is junk that I'm afraid to let go
-
-apply(df[1],2,function(x) wilcox.test(x,df$group))
-
-group.pairs <- combn(unique(means$Particle_MeanAbund),2,simplify=FALSE)
-
-apply(means[-1], 2, function(x)
-  # this loops over the list of group pairs and makes each such pair
-  # available as an integer vector y
-  lapply(group.pairs, function(y)
-    wilcox.test(x[df$?wilcoxgroup %in% y],df$group[df$group %in% y])))
-
-apply
-
-wilcox.test(41.575, 21.38462)
-
-wilcox.test(means$Particle_MeanAbund, means$Free_MeanAbund)
-
-
-
-apply(df[-1],2,function(x) kruskal.test(x,df$group))
-
-#### Time to test for significance using pairwise wilcoxon tests between the means of the particle and free living for each phyla
-free_test <- subset(free, select = c("filter", "Phylum", "Mean_SeqAbund")); 
-particle_test <- subset(particle, select = c("filter", "Phylum", "Mean_SeqAbund")); 
-#Change the name of the Mean_SeqAbund column to include free or particle
-names(free_test)[3]<-"Free_MeanAbund"
-names(particle_test)[3]<-"Particle_MeanAbund"
-#Check to make sure the data frames are in the same order --> yes!
-dim(particle_test); dim(free_test); particle_test$Phylum; free_test$Phylum
-#Make a new data frame with 3 columns: 1. Phyla name, 2. Particle Abund, 3. Free Abundance
-means <- particle_test
-means$filter = NULL
-means$Free_MeanAbund <- free_test$Free_MeanAbund
-
-#Remove the same infs, -Inf, and Nans
-means <- means[-31, ] #Remove Dictoglomi
-means <- means[-26, ]# Candidate_division_TM7
-means <- means[-24, ]# Candidate_division_OP8
-means <- means[-22, ]# Candidate_division_OP11
-means <- means[-15, ]# Thermotogae
-
-
-
-
-v

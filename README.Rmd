@@ -1,0 +1,256 @@
+---
+title: "The Saga of Marian's First Non-Parametric Statistical Tests"
+author: "Marian L. Schmidt"
+date: "October 25th, 2014"
+output:
+  html_document:
+    keep_md: yes
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+
+```{r, echo=FALSE, fig.width=16, fig.height = 10, warning = FALSE}
+library(ggplot2)
+library(plyr)
+
+
+phyla <- read.csv(file = "Phyla_Table.csv")
+phyla <- subset(phyla,  select=c("sample", "trophicstate",  "Phylum", "abundPerPhylum", "filter", "lakenames", "limnion"))
+
+class <- read.csv(file = "Class_Table.csv")
+class <- subset(class,  select=c("sample", "trophicstate",  "Phylum", "Class", "AbundPerClass", "filter", "lakenames", "limnion"))
+
+#Setting up our data frame
+#To include the sub-phyla of the Proteobacteria merge the alpha, beta, delta, epsilon, gamma, 
+#1.  Subset Proteo
+proteo <- subset(class, Phylum == "Proteobacteria")
+#2.  Subtract Proteos from phyla table
+phyla <- subset(phyla, Phylum != "Proteobacteria")
+#3.  Make class and phyla table the same -> a.  Remove Phylum column in class table
+proteo$Phylum = NULL
+#b.  Renmae Class column to be named Phylum to match phyla table
+colnames(proteo) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter", "lakenames", "limnion")
+colnames(phyla) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter", "lakenames", "limnion")
+#4.  Rbind class and phyla tables.
+data <- rbind(proteo, phyla)
+#I normalized/rarefied at 8500 seqs, so to get relative abundance I am dividing by 8500
+data$RelAbundance <- data$SeqAbundance/8500
+data <- subset(data, lakenames != "Sherman")
+
+#Summary stats for ratio analysis
+##  Function below from this website:  http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
+##  Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summariezed
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+  require(plyr)
+  
+  # New version of length which can handle NA's: if na.rm==T, don't count them
+  length2 <- function (x, na.rm=FALSE) {
+    if (na.rm) sum(!is.na(x))
+    else       length(x)
+  }
+  
+  # This does the summary. For each group's data frame, return a vector with
+  # N, mean, and sd
+  datac <- ddply(data, groupvars, .drop=.drop,
+                 .fun = function(xx, col) {
+                   c(N    = length2(xx[[col]], na.rm=na.rm),
+                     mean = mean   (xx[[col]], na.rm=na.rm),
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
+                   )
+                 },
+                 measurevar
+  )
+  
+  # Rename the "mean" column    
+  datac <- rename(datac, c("mean" = measurevar))
+  
+  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+  
+  # Confidence interval multiplier for standard error
+  # Calculate t-statistic for confidence interval: 
+  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+  datac$ci <- datac$se * ciMult
+  
+  return(datac)
+}
+
+### Let's just look at the relative abundance first
+#sum_stats is a data frame for the relative abundance figure
+sum_stats <- summarySE(data, measurevar = "RelAbundance", groupvars = "Phylum")
+#Order by the SeqAbundance
+sum_stats$Phylum <- factor(sum_stats$Phylum, levels = sum_stats$Phylum[order(sum_stats$RelAbundance)])
+abund <- subset(sum_stats,RelAbundance<0.01)
+
+####TO ADD ANNOTATION TEXT TO GRAPH BELOW
+library(grid)  # http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/#add-text-annotation-in-the-top-right-top-left-etc.-annotation_custom-and-friends
+my_grob = grobTree(textGrob("Error bars represent standard error.", x=0.3,  y=0.05, hjust=0,
+                            gp=gpar(col="black", fontsize=14)))
+
+abund_plot <- ggplot(abund, aes(y=RelAbundance , x=Phylum))  +
+  geom_bar(stat="identity", position=position_dodge(),  fill = "blue4", colour = "black") +
+  theme_bw() + ggtitle("Relative Abundance of Phyla Above 1% in All Samples") +
+  xlab("Phylum") + ylab("Relative Abundance") +
+  geom_errorbar(aes(ymin = RelAbundance -se, ymax = RelAbundance +se), width = 0.25) + 
+  coord_flip() +   annotation_custom(my_grob) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=12, face="bold"),
+        legend.text = element_text(size = 12),
+        legend.position="none");
+
+
+### On to calculating the log two fold abundance
+summarystats <- summarySE(data, measurevar = "SeqAbundance", groupvars = c("filter", "Phylum"))
+names(summarystats)[4]<-"Mean_SeqAbund"
+free <- subset(summarystats, filter == "Free")
+particle <- subset(summarystats, filter == "Particle")
+
+#Calculate the log 2 ratio and create a new data frame
+oddsratio <- log2(particle$Mean_SeqAbund/free$Mean_SeqAbund) #creates a vector
+odds_ratio <- data.frame(free$Phylum, oddsratio) #combine the Phylum names with it
+odds_ratio <- rename(odds_ratio, c("free.Phylum" = "Phylum"))
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+odds_ratio$colour <- ifelse(odds_ratio$oddsratio < 0, "firebrick1","steelblue")
+odds_ratio$hjust <- ifelse(odds_ratio$oddsratio > 0, 1.3, -0.3)
+#odds_ratio$Phylum <- factor(odds_ratio$Phylum, levels = odds_ratio$Phylum[order(odds_ratio$oddsratio)])
+
+#Let's delete Phyla from our data frame that are Inf, -Inf, or NaN
+Infs <- subset(odds_ratio, oddsratio == "Inf")
+neg_Infs <- subset(odds_ratio, oddsratio == "-Inf")
+#Now delete them.
+odds_ratio <- subset(odds_ratio, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" &
+                 Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fusobacteria" & Phylum != "Candidate_division_TM7")
+
+#Order by oddsratio!
+#odds_ratio <- odds_ratio[with(odds_ratio, order(-oddsratio)),] #doesn't work right!!!!
+odds_ratio$Phylum <- factor(odds_ratio$Phylum, levels = odds_ratio$Phylum[order(odds_ratio$oddsratio)])
+
+
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+ratio_plot <- ggplot(odds_ratio, aes(y=oddsratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black") +
+  geom_text(aes(y=0, fill = colour)) + theme_bw() + ylim(-4.5,3.5) +
+  coord_flip() + ggtitle("Particle-Association vs. Free-Living") + 
+  labs(y = "Log2 Abundance", x = "") + scale_x_discrete(breaks = NULL) +
+  scale_fill_manual(name  ="", breaks=c("firebrick1", "steelblue"), 
+                    labels=c("More Abundant in Free-Water", "More Abundant in Particles"),
+                    values = c("royalblue","violetred")) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=12, face="bold"),
+        legend.text = element_text(size = 12),
+        legend.justification=c(1,0), legend.position=c(1,0.6)); 
+
+
+#Use a non-parametric test pairwise test = Pairwise Wilcoxon Test.
+#Null Hypothesis:  The sequence abundance of particle and free living are the same (= to 0).
+#Alternative Hypothesis:  The seq abundance of particle and free are different.
+# If P is less than 0.05 then we reject the null hypothesis.
+#wilcox.test(particle, free)
+
+#To run a wilcox.test we can't just compare means -> we have to compare the distributions of our data
+#To get the distributions:
+dist <- subset(data, select = c("Phylum", "SeqAbundance", "filter", "sample")) #Get distributions from original file
+
+#Let's make sure that all of the sample names are the same for particles as they are for frees
+#This way we can check for what samples are missing, I first have to change the names of the samples to be the same
+dist$sample2 <- gsub("3um", "", dist$sample) #create new column with substitute nothing for "3um"
+dist$sample = NULL   #delete old column
+names(dist)[4]<-"sample" #give original name again
+dist$sample <- as.factor(dist$sample)
+#Have the same sample name now
+
+#Get the distributions of the data for each factor.
+free_dist <- subset(dist, filter == "Free") #Make a free-living dist
+part_dist <- subset(dist, filter == "Particle") #Make a particle-associated dist
+#dim(free_dist); dim(part_dist) #They have different dims - time to fix this!
+
+#What samples are missing from each data set
+sux <- setdiff(free_dist$sample, part_dist$sample); 
+this_sux <- setdiff(part_dist$sample, free_dist$sample); 
+
+#Remove the above non-duplicate and duplicate samples that we found with sux and this_sux
+#dim(free_dist); dim(part_dist) 
+free_dist <- subset(free_dist, sample != "BASE2" & sample != "LONE1" & sample != "LONE2" & sample != "LONH2")
+part_dist<- subset(part_dist, sample != "BSTE2" & sample !="GULH1" & sample !="LEEE1" & sample !="SIXE1" & sample !="SIXH2")
+#dim(free_dist); dim(part_dist) # I'm so happy!!!
+
+#We should also remove the phyla that gave us Inf, -Inf, or NaN from our log2 fold ratio
+free_dist <- subset(free_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
+part_dist <- subset(part_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
+#dim(free_dist); dim(part_dist) # Good
+
+##Make a vector of all the names of the Phyla in our samples
+phylumlist_free<-as.character(unique(free_dist$Phylum))
+phylumlist_part<-unique(part_dist$Phylum)
+#setdiff(phylumlist_free, phylumlist_part)
+phylumlist <- phylumlist_free
+
+#Make data frame filled with NAs to hold results inside of
+wresults<-data.frame(matrix(NA,length(phylumlist),2))
+names(wresults) <- c("Phylum", "P_Value")
+
+for(i in 1:length(phylumlist)){
+  free_sub<- subset(free_dist, Phylum == phylumlist[i])
+  part_sub<- subset(part_dist, Phylum == phylumlist[i])
+  wilcox <- wilcox.test(part_sub$SeqAbundance, free_sub$SeqAbundance, paired = TRUE)
+  wresults[i,1]<-phylumlist[i]
+  wresults[i,2]<-wilcox$p.value
+}
+# warnings()
+
+#We have to bonferroni correct because we ran 37 tests --> some are significant when they shouldn't be!
+num_tests <- length(unique(wresults$Phylum))
+wresults$Bonferroni_P<-wresults$P_Value/num_tests
+P_cutoff <- 0.05/length(wresults$Phylum)
+#length(wresults$Bonferroni_P[wresults$Bonferroni_P<P_cutoff])
+sigresults<-subset(wresults,Bonferroni_P<P_cutoff)
+
+
+library(grid)
+pushViewport(viewport(layout = grid.layout(1, 2)))
+print(abund_plot, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+print(ratio_plot , vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+```
+
+
+```{r echo = FALSE}
+tableCat <- function(inFrame) {
+    outText <- paste(names(inFrame), collapse = " | ")
+    outText <- c(outText, paste(rep("---", ncol(inFrame)), collapse = " | "))
+    invisible(apply(inFrame, 1, function(inRow) {
+        outText <<- c(outText, paste(inRow, collapse = " | "))
+    }))
+    return(outText)
+}
+```
+
+```{r echo=FALSE, results='asis'}
+sigresults <- tableCat(sigresults)
+sigresults <- cat(sigresults, sep = "\n")
+```
+
+
+
+
+
+
