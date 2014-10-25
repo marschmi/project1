@@ -2,10 +2,10 @@ library(ggplot2)
 
 
 phyla <- read.csv(file = "Phyla_Table.csv")
-phyla <- subset(phyla,  select=c("sample", "trophicstate",  "Phylum", "abundPerPhylum", "filter"))
+phyla <- subset(phyla,  select=c("sample", "trophicstate",  "Phylum", "abundPerPhylum", "filter", "lakenames", "limnion"))
 
 class <- read.csv(file = "Class_Table.csv")
-class <- subset(class,  select=c("sample", "trophicstate",  "Phylum", "Class", "AbundPerClass", "filter"))
+class <- subset(class,  select=c("sample", "trophicstate",  "Phylum", "Class", "AbundPerClass", "filter", "lakenames", "limnion"))
 
 #Setting up our data frame
 #To include the sub-phyla of the Proteobacteria merge the alpha, beta, delta, epsilon, gamma, 
@@ -16,13 +16,13 @@ phyla <- subset(phyla, Phylum != "Proteobacteria")
 #3.  Make class and phyla table the same -> a.  Remove Phylum column in class table
 proteo$Phylum = NULL
 #b.  Renmae Class column to be named Phylum to match phyla table
-colnames(proteo) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter")
-colnames(phyla) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter")
+colnames(proteo) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter", "lakenames", "limnion")
+colnames(phyla) <- c("sample", "trophicstate", "Phylum", "SeqAbundance", "filter", "lakenames", "limnion")
 #4.  Rbind class and phyla tables.
 data <- rbind(proteo, phyla)
 #I normalized/rarefied at 8500 seqs, so to get relative abundance I am dividing by 8500
 data$RelAbundance <- data$SeqAbundance/8500
-
+data <- subset(data, lakenames != "Sherman")
 
 #Summary stats for ratio analysis
 ##  Function below from this website:  http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
@@ -210,91 +210,135 @@ sigresults<-subset(wresults,Bonferroni_P<P_cutoff)
 #I will analyze productive vs. unproductive.  
 #Productive lake = Mesotrophic + Eutrophic, unproductive = Oligotrophic.
 #### ODDS RATIO FOR ONLY EUTROPHIC + MESOTROPHIC LAKES versus OLIGOTROPHIC
-test <- data; unique(test$trophicstate)
+#Need to be testing the same number of lakes.
+test <- subset(data, lakenames == "Baker" | lakenames == "Baseline" | lakenames == "Wintergreen" | lakenames == "Bassett"| lakenames == "Gull" | lakenames == "Lee" | lakenames == "LittleLong" | lakenames == "Sixteen"); 
+unique(test$trophicstate)
+test <- subset(test, sample != "BASE13um"  & sample != "BASH13um" & sample != "WINE1" & sample != "WINH1" & sample != "BAKH1")
 test$trophicstate <- as.character(test$trophicstate)
 test$trophicstate[test$trophicstate == "Mesotrophic"] <- "Eutrophic"; unique(test$trophicstate)
 test$trophicstate[test$trophicstate == "Eutrophic"] <- "Productive"; unique(test$trophicstate)
 test$trophicstate[test$trophicstate == "Oligotrophic"] <- "Unproductive"; unique(test$trophicstate)
 test$trophicstate <- as.factor(test$trophicstate); unique(test$trophicstate)
 
+
+
+##Statistics for troph 
 prod_stats <- summarySE(test, measurevar = "SeqAbundance", groupvars = c("trophicstate", "Phylum"))
+names(prod_stats)[4]<-"Mean_SeqAbund" #give original name again
 prod <- subset(prod_stats, trophicstate == "Productive")   
 unprod <- subset(prod_stats, trophicstate == "Unproductive")
 dim(prod); dim(unprod) 
 #We have to add up and mean the 
 
-#eutroph$trophicstate[eutroph$trophicstate == "Mesotrophic"] <- "Eutrophic" #Change all Mesotrophic to Eutrophic so we only have 2 factors when we combine
-prodratio <- log2(prod$SeqAbundance/unprod$SeqAbundance) #creates a vector
+prodratio <- log2(prod$Mean_SeqAbund/unprod$Mean_SeqAbund) #creates a vector
 prod_ratio <- data.frame(prod$Phylum, prodratio) #combine the Phylum names with it
 prod_ratio <- rename(prod_ratio, c("prod.Phylum" = "Phylum"))
 
-#Lots of infs. 
+#Lots of infs. We have to remove them.
+Infs <- subset(prod_ratio, prodratio == "Inf"); Infs
+neg_Infs <- subset(prod_ratio, prodratio == "-Inf"); neg_Infs
+
+prod_ratio <- subset(prod_ratio, Phylum != "Deferribacteres" & Phylum != "Elusimicrobia" &
+                 Phylum != "SPOTSOCT00m83" & Phylum != "Thermotogae" &
+                 Phylum != "Candidate_division_OP8" & Phylum != "Candidate_division_SR1" &
+                 Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" &
+                 Phylum != "Dictyoglomi" & Phylum != "Fibrobacteres" &
+                 Phylum != "Tenericutes" & Phylum != "Candidate_division_OP11" &
+                 Phylum != "Fusobacteria" & Phylum != "WCHB1-60")
 
 
+prod_ratio$colour <- ifelse(prod_ratio$prodratio < 0, "firebrick1","steelblue")
+prod_ratio$hjust <- ifelse(prod_ratio$prodratio > 0, 1.3, -0.3)
 
-
-
-#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
-prod_ratio$colour <- ifelse(prod_ratio$prod_ratio < 0, "firebrick1","steelblue")
-prod_ratio$hjust <- ifelse(prod_ratio$prod_ratio > 0, 1.3, -0.3)
-
-
-
-
-
-
-
-#What samples are missing from each data set
-sux <- setdiff(free_dist$sample, part_dist$sample); sux
-this_sux <- setdiff(part_dist$sample, free_dist$sample); this_sux
-
-#Remove the above non-duplicate and duplicate samples that we found with sux and this_sux
-dim(free_dist); dim(part_dist) 
-free_dist <- subset(free_dist, sample != "BASE2" & sample != "LONE1" & sample != "LONE2" & sample != "LONH2")
-part_dist<- subset(part_dist, sample != "BSTE2" & sample !="GULH1" & sample !="LEEE1" & sample !="SIXE1" & sample !="SIXH2")
-dim(free_dist); dim(part_dist) # I'm so happy!!!
-
-#We should also remove the phyla that gave us Inf, -Inf, or NaN from our log2 fold ratio
-free_dist <- subset(free_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
-part_dist <- subset(part_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
-dim(free_dist); dim(part_dist) # Good
-
-
-
-
-
-
-
-
-
-#Candidate_division_OP11[22,] & Fusobacteria[34,] is 0/0 and therefore, not a number.  We need to remove it from our data frame.
-dim(eu_meso_ratio)
-eu_meso_ratio <- eu_meso_ratio[-22, ] 
-eu_meso_ratio <- eu_meso_ratio[-33, ] 
-dim(eu_meso_ratio)
-
-#odds_ratio <- odds_ratio[with(odds_ratio, order(-oddsratio)),] #doesn't work right!!!!
-eu_meso_ratio$Phylum <- factor(eu_meso_ratio$Phylum, levels = eu_meso_ratio$Phylum[order(eu_meso_ratio$MesoEutrophRatio)])
+#Order by prodratio!
+#prod_ratio <- prod_ratio[with(prod_ratio, order(-prodratio)),] #doesn't work right!!!!
+prod_ratio$Phylum <- factor(prod_ratio$Phylum, levels = prod_ratio$Phylum[order(prod_ratio$prodratio)])
 
 
 #  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
-eu_mesotroph_ratioplot <- ggplot(eu_meso_ratio, aes(y=MesoEutrophRatio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+prod_ratioplot <- ggplot(prod_ratio, aes(y=prodratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
   geom_bar(stat="identity", position=position_dodge(), colour = "black") +
   #geom_bar(stat = "identity", aes(fill = colour)) +
   geom_text(aes(y=0, fill = colour)) + theme_bw() + 
-  coord_flip() + ggtitle("Mesotrophic vs. Eutrophic Sequence Abundances") +
-  labs(y = "Log2 Abundance Ratio", x = "") + scale_x_discrete(breaks = NULL) +
+  coord_flip() + ggtitle("Oligotrophic vs. Eutrophic + Mesotrophic") +
+  labs(y = "Log2 Abundance", x = "") + scale_x_discrete(breaks = NULL) +
   scale_fill_manual(name  ="", breaks=c("firebrick1", "steelblue"), 
-                    labels=c("More Abundant in Mesotrophic", "More Abundant in Eutrophic"),
-                    values = c("orange","deeppink")) +
+                    labels=c("More Abundant in Oligotrophic", "More Abundant in Eutrophic + Mesotrophic"),
+                    values = c("turquoise","orangered")) +
   theme(axis.title.x = element_text(face="bold", size=16),
         axis.text.x = element_text(angle=0, colour = "black", size=14),
         axis.text.y = element_text(colour = "black", size=14),
         axis.title.y = element_text(face="bold", size=16),
         plot.title = element_text(face="bold", size = 20),
-        legend.title = element_text(size=16, face="bold"),
-        legend.text = element_text(size = 16),
-        legend.justification=c(1,0), legend.position=c(1,0)); eu_mesotroph_ratioplot  
+        legend.title = element_text(size=12, face="bold"),
+        legend.text = element_text(size = 12),
+        legend.justification=c(1,0), legend.position=c(1,0.6)); prod_ratioplot
+
+######TIME FOR WILCOXON
+###subset test data frame by the below columns.
+troph_dist <- subset(test, select = c("Phylum", "SeqAbundance", "trophicstate", "sample")) #Get distributions from original file
+
+troph_dist <- subset(test, Phylum != "Deferribacteres" & Phylum != "Elusimicrobia" &
+                       Phylum != "SPOTSOCT00m83" & Phylum != "Thermotogae" &
+                       Phylum != "Candidate_division_OP8" & Phylum != "Candidate_division_SR1" &
+                       Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" &
+                       Phylum != "Dictyoglomi" & Phylum != "Fibrobacteres" &
+                       Phylum != "Tenericutes" & Phylum != "Candidate_division_OP11" &
+                       Phylum != "Fusobacteria" & Phylum != "WCHB1-60")
+
+#Get the distributions of the data for each factor.
+prod_dist <- subset(troph_dist, trophicstate == "Productive") #Make a free-living dist
+unprod_dist <- subset(troph_dist, trophicstate == "Unproductive") #Make a particle-associated dist
+dim(prod_dist); dim(unprod_dist) #They have different dims - time to fix this!
+
+
+#remove samples from prod_dist
+prod_dist <- subset(prod_dist, sample != "BASE13um"  & sample != "BASH13um" & sample != "WINE1" & sample != "WINH1" & sample != "BAKH1")
+
+#Sample problem again!!!!
+length(unique(prod_dist$sample)); length(unique(unprod_dist$sample))
+unique(prod_dist$sample); unique(unprod_dist$sample)
+dim(prod_dist); dim(unprod_dist)
+
+##Make a vector of all the names of the Phyla in our samples
+phylumlist_prod<-as.character(unique(prod_dist$Phylum))
+phylumlist_unprod<-unique(unprod_dist$Phylum)
+setdiff(phylumlist_prod, phylumlist_unprod)
+phylumlist2 <- phylumlist_prod
+
+#Make data frame filled with NAs to hold results inside of
+troph_wresults<-data.frame(matrix(NA,length(phylumlist2),2))
+names(troph_wresults) <- c("Phylum", "P_Value")
+
+for(i in 1:length(phylumlist2)){
+  prod_sub<- subset(prod_dist, Phylum == phylumlist2[i])
+  unprod_sub<- subset(unprod_dist, Phylum == phylumlist2[i])
+  wilcox <- wilcox.test(prod_sub$SeqAbundance, unprod_sub$SeqAbundance)
+  troph_wresults[i,1]<-phylumlist2[i]
+  troph_wresults[i,2]<-wilcox$p.value
+}
+# warnings()
+
+#We have to bonferroni correct because we ran 37 tests --> some are significant when they shouldn't be!
+num_tests2 <- length(unique(troph_wresults$Phylum))
+troph_wresults$Bonferroni_P<-troph_wresults$P_Value/num_tests2
+P_cutoff2 <- 0.05/length(phylumlist2)
+length(troph_wresults$Bonferroni_P[troph_wresults$Bonferroni_P<P_cutoff2])
+troph_sigresults<-subset(troph_wresults,Bonferroni_P<P_cutoff2); troph_sigresults
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #Too many phylum to view in one graph... let's remove some of the groups 
 #From above graph, let's remove OP11, OP8, Fusobacteria, WCHB1-60, Dictyoglomi, SPOTSOCT00m83, Derribacteres, Elusimicrobia, Thermotogae, TM7
@@ -356,6 +400,168 @@ trophabund_plot <- ggplot(troph_sumstats, aes(y=RelAbundance, x=Phylum, fill=tro
         legend.title = element_text(size=16, face="bold"),
         legend.text = element_text(size = 16),
         legend.justification = c(1, 1), legend.position = c(0.9, 0.2)); trophabund_plot
+
+
+
+
+
+
+
+
+##########      DEPTH       ########################
+########
+######
+#####
+###
+#Summary stats for DEPTH  state analysi
+depth_sumstats <- summarySE(data, measurevar = "SeqAbundance", groupvars = c("limnion", "Phylum"))
+names(depth_sumstats)[4]<-"Mean_SeqAbund"
+
+depth_sumstats <- subset(depth_sumstats, Phylum != "Deferribacteres" & Phylum != "Elusimicrobia" &
+                        Phylum != "SPOTSOCT00m83" & Phylum != "Thermotogae" &
+                        Phylum != "Candidate_division_OP8" & Phylum != "Candidate_division_OP11" &
+                        Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" &
+                        Phylum != "Dictyoglomi" & Phylum != "Fibrobacteres" &
+                        Phylum != "Tenericutes" & Phylum != "BD1-5")
+
+top <- subset(depth_sumstats, limnion == "Top")
+bottom <- subset(depth_sumstats, limnion == "Bottom")
+dim(top); dim(bottom)
+
+#Calculate the log 2 ratio and create a new data frame
+depthratio <- log2(top$Mean_SeqAbund/bottom$Mean_SeqAbund) #creates a vector
+depth_ratio <- data.frame(top$Phylum, depthratio) #combine the Phylum names with it
+depth_ratio <- rename(depth_ratio, c("top.Phylum" = "Phylum"))
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+depth_ratio$colour <- ifelse(depth_ratio$depthratio < 0, "firebrick1","steelblue")
+depth_ratio$hjust <- ifelse(depth_ratio$depthratio > 0, 1.3, -0.3)
+#depth_ratio$Phylum <- factor(depth_ratio$Phylum, levels = depth_ratio$Phylum[order(depth_ratio$depthratio)])
+
+#remove some samples
+dInfs <- subset(depth_ratio, depthratio == "Inf"); dInfs
+neg_dInfs <- subset(depth_ratio, depthratio == "-Inf"); neg_dInfs
+
+
+
+#Order by depthratio!
+#depth_ratio <- depth_ratio[with(depth_ratio, order(-depthratio)),] #doesn't work right!!!!
+depth_ratio$Phylum <- factor(depth_ratio$Phylum, levels = depth_ratio$Phylum[order(depth_ratio$depthratio)])
+
+
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+depth_ratio_plot <- ggplot(depth_ratio, aes(y=depthratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black") +
+  #geom_bar(stat = "identity", aes(fill = colour)) +
+  geom_text(aes(y=0, fill = colour)) + theme_bw() + 
+  coord_flip() + ggtitle("Particle-Association vs. Free-Living") +
+  labs(y = "Log2 Abundance", x = "") + scale_x_discrete(breaks = NULL) +
+  scale_fill_manual(name  ="", breaks=c("firebrick1", "steelblue"), 
+                    labels=c("More Abundant in Bottom Waters", "More Abundant in Top Waters"),
+                    values = c("royalblue","violetred")) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=12, face="bold"),
+        legend.text = element_text(size = 12),
+        legend.justification=c(1,0), legend.position=c(0.3,0.6)); depth_ratio_plot  
+
+
+
+
+#Use a non-parametric test pairwise test = Pairwise Wilcoxon Test.
+#Null Hypothesis:  The sequence abundance of particle and free living are the same (= to 0).
+#Alternative Hypothesis:  The seq abundance of particle and free are different.
+# If P is less than 0.05 then we reject the null hypothesis.
+#wilcox.test(particle, free)
+
+#To run a wilcox.test we can't just compare means -> we have to compare the distributions of our data
+#To get the distributions:
+depth_dist <- subset(data, select = c("Phylum", "SeqAbundance", "limnion", "sample", "lakenames")) #Get distributions from original file
+depth_dist <- subset(depth_dist, Phylum != "Deferribacteres" & Phylum != "Elusimicrobia" &
+                           Phylum != "SPOTSOCT00m83" & Phylum != "Thermotogae" &
+                           Phylum != "Candidate_division_OP8" & Phylum != "Candidate_division_OP11" &
+                           Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" &
+                           Phylum != "Dictyoglomi" & Phylum != "Fibrobacteres" &
+                           Phylum != "Tenericutes" & Phylum != "BD1-5")
+
+#Let's make sure that all of the sample names are the same for particles as they are for frees
+#This way we can check for what samples are missing, I first have to change the names of the samples to be the same
+depth_dist$sample2 <- gsub("3um", "", depth_dist$sample) #create new column with substitute nothing for "3um"
+depth_dist$sample = NULL   #delete old column
+names(depth_dist)[5]<-"sample" #give original name again
+depth_dist$sample <- as.factor(depth_dist$sample)
+#Have the same sample name now
+
+#Get the distributions of the data for each factor.
+top_dist <- subset(depth_dist, limnion == "Top") #Make a free-living depth_dist
+bot_dist <- subset(depth_dist, limnion == "Bottom") #Make a particle-associated depth_dist
+dim(top_dist); dim(bot_dist) #They have different dims - time to fix this!
+
+#What samples are missing from each data set
+sux3 <- setdiff(top_dist$sample, bot_dist$sample); sux3
+this_sux3 <- setdiff(bot_dist$sample, top_dist$sample); this_sux3
+length(unique(top_dist$sample)); length(unique(bot_dist$sample)) #not because of sample
+length(unique(top_dist$lakenames)); length(unique(bot_dist$lakenames)) #not because of lakenames
+length(unique(top_dist$Phylum)); length(unique(bot_dist$Phylum)) #not because of lakenames
+dim(top_dist); dim(bot_dist)
+bot_dist$sample <- gsub("H", "E", bot_dist$sample)
+sux4 <- setdiff(top_dist$sample, bot_dist$sample); sux4
+#I'm not sure what's going on..... i'm just going to make them the same.... not a good method, i know - but i'm desperate!
+
+bot_dist <- bot_dist[-c(1055:1147),] 
+
+
+##Make a vector of all the names of the Phyla in our samples
+phylumlist_top <-as.character(unique(top_dist$Phylum))
+phylumlist_bot <-unique(bot_dist$Phylum)
+setdiff(phylumlist_top, phylumlist_bot)
+phylumlist3 <- phylumlist_top
+
+#Make data frame filled with NAs to hold results inside of
+depth_wresults<-data.frame(matrix(NA,length(phylumlist3),2))
+names(depth_wresults) <- c("Phylum", "P_Value")
+
+for(i in 1:length(phylumlist3)){
+  top_sub<- subset(top_dist, Phylum == phylumlist3[i])
+  bot_sub<- subset(bot_dist, Phylum == phylumlist3[i])
+  wilcox <- wilcox.test(top_sub$SeqAbundance, bot_sub$SeqAbundance, paired = TRUE)
+  depth_wresults[i,1]<-phylumlist3[i]
+  depth_wresults[i,2]<-wilcox$p.value
+}
+# warnings()
+
+#We have to bonferroni correct because we ran 37 tests --> some are significant when they shouldn't be!
+num_tests <- length(unique(depth_wresults$Phylum))
+depth_wresults$Bonferroni_P<-depth_wresults$P_Value/num_tests
+P_cutoff <- 0.05/37
+length(depth_wresults$Bonferroni_P[depth_wresults$Bonferroni_P<P_cutoff])
+sigresults<-subset(depth_wresults,Bonferroni_P<P_cutoff)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -537,21 +743,4 @@ means <- means[-15, ]# Thermotogae
 
 
 
-dist <- subset(data, Phylum == "Acidobacteria" & Phylum == "Actinobacteria" &
-                 Phylum == "Alphaproteobacteria" & Phylum == "Betaproteobacteria" &
-                 Phylum == "Chlamydiae" & Phylum == "Cyanobacteria" &
-                 Phylum == "Deferribacteres" & Phylum == "Deltaproteobacteria" &
-                 Phylum == "Elusimicrobia" & Phylum == "Epsilonproteobacteria" &
-                 Phylum == "Gammaproteobacteria" & Phylum == "Gemmatimonadetes" &
-                 Phylum == "SPOTSOCT00m83" & Phylum == "TA18" &
-                 Phylum == "unclassified" & Phylum == "Armatimonadetes" &
-                 Phylum == "Bacteroidetes" & Phylum == "BD1" &
-                 Phylum == "Candidate_division_BRC1" & Phylum == "Candidate_division_OD1" &
-                 Phylum == "Candidate_division_OP3" & Phylum == "Candidate_division_SR1" &
-                 Phylum == "Candidate_division_WS3" & Phylum == "Chlorobi" &
-                 Phylum == "Chloroflexi" & Phylum == "Deinococcus-Thermus" &
-                 Phylum == "Fibrobacteres" & Phylum == "Firmicutes" &  
-                 Phylum == "Fusobacteria" & Phylum == "Lentisphaerae" &
-                 Phylum == "NPL-UPA2" & Phylum == "Planctomycetes" &
-                 Phylum == "Spirochaetae" & Phylum == "Tenericutes" &
-                 Phylum == "TM6" & Phylum == "Verrucomicrobia" & Phylum == "WCHB1-60")
+v
