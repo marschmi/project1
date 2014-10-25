@@ -201,6 +201,176 @@ sigresults<-subset(wresults,Bonferroni_P<P_cutoff)
 
 
 
+##########
+########
+######
+#####
+###
+#Summary stats for trophic state analysis
+#I will analyze productive vs. unproductive.  
+#Productive lake = Mesotrophic + Eutrophic, unproductive = Oligotrophic.
+#### ODDS RATIO FOR ONLY EUTROPHIC + MESOTROPHIC LAKES versus OLIGOTROPHIC
+test <- data; unique(test$trophicstate)
+test$trophicstate <- as.character(test$trophicstate)
+test$trophicstate[test$trophicstate == "Mesotrophic"] <- "Eutrophic"; unique(test$trophicstate)
+test$trophicstate[test$trophicstate == "Eutrophic"] <- "Productive"; unique(test$trophicstate)
+test$trophicstate[test$trophicstate == "Oligotrophic"] <- "Unproductive"; unique(test$trophicstate)
+test$trophicstate <- as.factor(test$trophicstate); unique(test$trophicstate)
+
+prod_stats <- summarySE(test, measurevar = "SeqAbundance", groupvars = c("trophicstate", "Phylum"))
+prod <- subset(prod_stats, trophicstate == "Productive")   
+unprod <- subset(prod_stats, trophicstate == "Unproductive")
+dim(prod); dim(unprod) 
+#We have to add up and mean the 
+
+#eutroph$trophicstate[eutroph$trophicstate == "Mesotrophic"] <- "Eutrophic" #Change all Mesotrophic to Eutrophic so we only have 2 factors when we combine
+prodratio <- log2(prod$SeqAbundance/unprod$SeqAbundance) #creates a vector
+prod_ratio <- data.frame(prod$Phylum, prodratio) #combine the Phylum names with it
+prod_ratio <- rename(prod_ratio, c("prod.Phylum" = "Phylum"))
+
+#Lots of infs. 
+
+
+
+
+
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+prod_ratio$colour <- ifelse(prod_ratio$prod_ratio < 0, "firebrick1","steelblue")
+prod_ratio$hjust <- ifelse(prod_ratio$prod_ratio > 0, 1.3, -0.3)
+
+
+
+
+
+
+
+#What samples are missing from each data set
+sux <- setdiff(free_dist$sample, part_dist$sample); sux
+this_sux <- setdiff(part_dist$sample, free_dist$sample); this_sux
+
+#Remove the above non-duplicate and duplicate samples that we found with sux and this_sux
+dim(free_dist); dim(part_dist) 
+free_dist <- subset(free_dist, sample != "BASE2" & sample != "LONE1" & sample != "LONE2" & sample != "LONH2")
+part_dist<- subset(part_dist, sample != "BSTE2" & sample !="GULH1" & sample !="LEEE1" & sample !="SIXE1" & sample !="SIXH2")
+dim(free_dist); dim(part_dist) # I'm so happy!!!
+
+#We should also remove the phyla that gave us Inf, -Inf, or NaN from our log2 fold ratio
+free_dist <- subset(free_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
+part_dist <- subset(part_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
+dim(free_dist); dim(part_dist) # Good
+
+
+
+
+
+
+
+
+
+#Candidate_division_OP11[22,] & Fusobacteria[34,] is 0/0 and therefore, not a number.  We need to remove it from our data frame.
+dim(eu_meso_ratio)
+eu_meso_ratio <- eu_meso_ratio[-22, ] 
+eu_meso_ratio <- eu_meso_ratio[-33, ] 
+dim(eu_meso_ratio)
+
+#odds_ratio <- odds_ratio[with(odds_ratio, order(-oddsratio)),] #doesn't work right!!!!
+eu_meso_ratio$Phylum <- factor(eu_meso_ratio$Phylum, levels = eu_meso_ratio$Phylum[order(eu_meso_ratio$MesoEutrophRatio)])
+
+
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+eu_mesotroph_ratioplot <- ggplot(eu_meso_ratio, aes(y=MesoEutrophRatio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black") +
+  #geom_bar(stat = "identity", aes(fill = colour)) +
+  geom_text(aes(y=0, fill = colour)) + theme_bw() + 
+  coord_flip() + ggtitle("Mesotrophic vs. Eutrophic Sequence Abundances") +
+  labs(y = "Log2 Abundance Ratio", x = "") + scale_x_discrete(breaks = NULL) +
+  scale_fill_manual(name  ="", breaks=c("firebrick1", "steelblue"), 
+                    labels=c("More Abundant in Mesotrophic", "More Abundant in Eutrophic"),
+                    values = c("orange","deeppink")) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=16, face="bold"),
+        legend.text = element_text(size = 16),
+        legend.justification=c(1,0), legend.position=c(1,0)); eu_mesotroph_ratioplot  
+
+#Too many phylum to view in one graph... let's remove some of the groups 
+#From above graph, let's remove OP11, OP8, Fusobacteria, WCHB1-60, Dictyoglomi, SPOTSOCT00m83, Derribacteres, Elusimicrobia, Thermotogae, TM7
+narrowed_trophstats <- subset(troph_sumstats, Phylum != "Candidate_division_OP11" & 
+                                Phylum != "Candidate_division_OP8" & Phylum != "Fusobacteria" & 
+                                Phylum != "WCHB1-60" & Phylum != "SPOTSOCT00m83" & Phylum != "Dictyoglomi" & 
+                                Phylum != "Deferribacteres" & Phylum != "Elusimicrobia" & 
+                                Phylum != "Candidate_division_TM7" & Phylum != "Thermotogae" &
+                                Phylum != "Tenericutes" & Phylum != "Gemmatimonadetes" &
+                                Phylum != "BD1-5" & Phylum != "Candidate_division_WS3")
+
+narrowed_trophabund_plot <- ggplot(narrowed_trophstats, aes(y=RelAbundance, x=Phylum, fill=trophicstate))  +
+  geom_bar(stat="identity", position=position_dodge()) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black", show_guide=FALSE) + 
+  theme_bw() + ggtitle("Relative Abundance of Each Phyla in All Samples") +
+  xlab("Phylum") + ylab("Relative Abundance") +
+  geom_errorbar(aes(ymin = RelAbundance-se, ymax = RelAbundance+se), width = 0.5, position=position_dodge(.9)) + 
+  scale_fill_manual(name = "Trophic State", labels = c("Eutrophic", "Mesotrophic", "Oligotrophic"), values = c("deeppink", "orange", "turquoise3")) +
+  coord_flip() +   annotation_custom(my_grob) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=16, face="bold"),
+        legend.text = element_text(size = 16),
+        legend.justification = c(1, 1), legend.position = c(0.9, 0.2)); narrowed_trophabund_plot
+
+
+
+
+
+
+
+
+
+
+troph_sumstats <- summarySE(data, measurevar = "RelAbundance",groupvars = c("trophicstate", "Phylum"))
+troph_sumstats$Phylum <- factor(troph_sumstats$Phylum, levels = troph_sumstats$Phylum[order(troph_sumstats$RelAbundance)])
+
+
+library(grid)  # http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/#add-text-annotation-in-the-top-right-top-left-etc.-annotation_custom-and-friends
+my_grob = grobTree(textGrob("Error bars represent standard error.", x=0.6,  y=0.05, hjust=0,
+                            gp=gpar(col="black", fontsize=14)))
+
+trophabund_plot <- ggplot(troph_sumstats, aes(y=RelAbundance, x=Phylum, fill=trophicstate))  +
+  geom_bar(stat="identity", position=position_dodge()) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black", show_guide=FALSE) + 
+  theme_bw() + ggtitle("Relative Abundance of Each Phyla in All Samples") +
+  xlab("Phylum") + ylab("Relative Abundance") +
+  geom_errorbar(aes(ymin = RelAbundance-se, ymax = RelAbundance+se), width = 0.5, position=position_dodge(.9)) + 
+  scale_fill_manual(name = "Trophic State", labels = c("Eutrophic", "Mesotrophic", "Oligotrophic"), values = c("deeppink", "orange", "turquoise3")) +
+  coord_flip() +   annotation_custom(my_grob) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 20),
+        legend.title = element_text(size=16, face="bold"),
+        legend.text = element_text(size = 16),
+        legend.justification = c(1, 1), legend.position = c(0.9, 0.2)); trophabund_plot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
