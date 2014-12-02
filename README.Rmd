@@ -1,31 +1,56 @@
 ---
-title: "The Saga of Marian's First Non-Parametric Statistical Tests"
+title: "Significant Differences between Particle-Associated and Free-Living Bacterial Community Composition in Freshwater Lakes"
 author: "Marian L. Schmidt"
-date: "October 25th, 2014"
 output:
   html_document:
     keep_md: yes
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+###Introduction
+Though aquatic ecosystems may appear homogeneous upon first glance, there is quite a lot of heterogeneity in habitat structure, especially in dynamic environments like freshwater lakes.  Freshwater lakes have a very seasonal behavior that is driven by temperature-induced density changes in water. Since water is most dense at 3.9 degrees celsius and as it heats up or cools, it becomes less dense.  Typically, temperate freshwater lakes stratify in the winter and summer and undergo full water column mixis in spring and fall.  At the onset of stratification, surface waters and bottom waters are restricted from interacting.  Therefore, as stratification prolongs (especially in summer), there are major shifts in the chemistry and biology surface waters and bottom waters.  
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+An important habitat for bacteria in many aquatic ecosystems are particles.  Particles in aquatic ecosystems have been deemed “hotspots of microbial activity” (Azam, 1998; Grossart, 2010), “hotbeds for genome reshuffling” (Ganesh et al., 2014), and active sites for organic matter mineralization (Grossart, 2010).  Therefore, I was interested in analyzing particle-associated bacteria in comparison to free-living bacteria in stratified lakes.
+
+While I have done most of the analysis of bacterial community composition,  I was interested in testing for significant differences between particle associated and free-living bacteria in the surface waters versus the bottom waters in stratified lakes.
+
+###Research Questions and Hypotheses
+1.  What bacterial phyla are the dominant members of the overall freshwater lake community that I sampled?
+2.  Do particle-associated bacteria differ from free-living bacteria in **surface** waters?  
+      + **Hypothesis:** Particle-associated and free-living bacteria **do not** significantly differ in surface waters.
+3.  Do particle-associated bacteria differ from free-living bacteria in **bottom** waters?
+      + **Hypothesis:** Particle-associated and free-living bacteria **do** significantly differ in surface waters.
 
 
+###Methods
+I have characterized the bacterial community composition of 10 lakes in southwestern Michigan by Michigan State University’s Kellogg Biological station that fall across a productivity gradient, which include three eutrophic (high productivity: Baker, Baseline and Wintergreen), three mesotrophic (medium productivity: Bassett, Bristol, and Payne), and four oligotrophic (low productivity: Gull, Lee, Little Long and Sixteen) lakes.  At the deepest location within each lake, I performed a lake profile using a multi-probe Hydrolab sonde for pH, temperature, conductivity, and dissolved oxygen concentration.  I collected duplicate samples of the particle-associated (20–3 μm fraction) and free-living (3-0.22 μm fraction) bacterial communities from the surface and bottom layer of the lake.  Next, I inferred bacterial community composition using high throughput tag sequencing of the V4 hypervariable region of the 16S rRNA gene (Caporaso et al., 2012). I subsequently processed the sequences using the MiSeq SOP (Kozich et al., 2013, accessed September 2014) with the Mothur program (Schloss et al., 2009) to create a shared and a taxonomy file.  I then inported my shared and taxonomy file into RStudio to combine them into taxonomic-level tables.  These tables include categorical information (e.g. particle-association, lake layer, etc), sequence abundance, and means and standard deviations for categorical information.  Here, I will be working with my phylum-level and my class level data.  
+
+####Programming methodology:
+1. Combine my phylum-level and class-level tables to include the sub-phyla of the proteobacteria.  
+2. Plot the relative abundance of each bacterial phyla in all of my samples.  
+3. Subset the data into the surface and bottom waters.  
+4. Calculate and plot a Log2-fold odds ratio as a visualization of changes in relative abundance.  
+5. Run a significance test via the non-parametric paired Wilcoxon Test.  
+      + I have decided to do a paired Wilcoxon test because my sample collection methodology included a successive filtration of the same water sample through a 3 μm filter (particle-associated) and 0.22 μm (free-living) filter. 
 
 
-```{r, echo=FALSE, fig.width=16, fig.height = 10, warning = FALSE}
+###Results
+First, I wondered what the mean relative abundance of each bacterial phyla across all my samples.  Who are the dominant members of the overall freshwater community in the lakes that I sampled?
+
+
+```{r Read in Functions & Abundance, echo=FALSE, fig.width=18, fig.height = 8, warning = FALSE, fig.align='center'}
 library(ggplot2)
 library(plyr)
 
-
+# I will be working at the phylum level:  The phyla table is a file that I made with my shared file that I outputted from mothur
 phyla <- read.csv(file = "Phyla_Table.csv")
 phyla <- subset(phyla,  select=c("sample", "trophicstate",  "Phylum", "abundPerPhylum", "filter", "lakenames", "limnion"))
 
+#Class_table.csv is a class-level file that I made with my shared file that I created in mothur
+#I want to add the sub-phyla of the proteobacteria in my analysis.
 class <- read.csv(file = "Class_Table.csv")
 class <- subset(class,  select=c("sample", "trophicstate",  "Phylum", "Class", "AbundPerClass", "filter", "lakenames", "limnion"))
 
-#Setting up our data frame
+#Setting up our data frame to include proteobacteria
 #To include the sub-phyla of the Proteobacteria merge the alpha, beta, delta, epsilon, gamma, 
 #1.  Subset Proteo
 proteo <- subset(class, Phylum == "Proteobacteria")
@@ -86,24 +111,67 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
   return(datac)
 }
 
+# Multiple plot function
+# From:  http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  require(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
 ### Let's just look at the relative abundance first
 #sum_stats is a data frame for the relative abundance figure
 sum_stats <- summarySE(data, measurevar = "RelAbundance", groupvars = "Phylum")
 #Order by the SeqAbundance
 sum_stats$Phylum <- factor(sum_stats$Phylum, levels = sum_stats$Phylum[order(sum_stats$RelAbundance)])
-abund <- subset(sum_stats,RelAbundance<0.01)
+abund <- subset(sum_stats,RelAbundance>0.005)
 
-####TO ADD ANNOTATION TEXT TO GRAPH BELOW
-library(grid)  # http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/#add-text-annotation-in-the-top-right-top-left-etc.-annotation_custom-and-friends
-my_grob = grobTree(textGrob("Error bars represent standard error.", x=0.3,  y=0.05, hjust=0,
-                            gp=gpar(col="black", fontsize=14)))
 
+#Relative abundance plot 
 abund_plot <- ggplot(abund, aes(y=RelAbundance , x=Phylum))  +
-  geom_bar(stat="identity", position=position_dodge(),  fill = "blue4", colour = "black") +
-  theme_bw() + ggtitle("Relative Abundance of Phyla Above 1% in All Samples") +
-  xlab("Phylum") + ylab("Relative Abundance") +
-  geom_errorbar(aes(ymin = RelAbundance -se, ymax = RelAbundance +se), width = 0.25) + 
-  coord_flip() +   annotation_custom(my_grob) +
+  geom_bar(stat="identity", position=position_dodge(),  fill = "darkorchid3", colour = "black") +
+  theme_bw() + ggtitle("Phyla Above 0.5% in All Samples") +
+  xlab("Phylum") + ylab("Mean Relative Abundance (%)") +
+  geom_errorbar(aes(ymin = RelAbundance -se, ymax = RelAbundance +se), width = 0.25) + coord_flip() +
   theme(axis.title.x = element_text(face="bold", size=16),
         axis.text.x = element_text(angle=0, colour = "black", size=14),
         axis.text.y = element_text(colour = "black", size=14),
@@ -111,129 +179,296 @@ abund_plot <- ggplot(abund, aes(y=RelAbundance , x=Phylum))  +
         plot.title = element_text(face="bold", size = 20),
         legend.title = element_text(size=12, face="bold"),
         legend.text = element_text(size = 12),
-        legend.position="none");
+        legend.position="none"); abund_plot
+```
+
+_**Figure 1:**  The relative abundance of each bacterial phyla above 0.5% in all samples.  Error bars represent standard error._  
+
+_Bacteriodetes_ is the most common member of my freshwater lake samples as it has a mean of 23.55%.  _Cyanobacteria_ rank second with a mean abundance of 14.21% and then _Verrucomicrobia_ at 11.88%.  This goes in line with other freshwater bacterioplankton studies (Newton et al., 2011; Bizic-Ionescu et al., 2014).
 
 
-### On to calculating the log two fold abundance
-summarystats <- summarySE(data, measurevar = "SeqAbundance", groupvars = c("filter", "Phylum"))
-names(summarystats)[4]<-"Mean_SeqAbund"
-free <- subset(summarystats, filter == "Free")
-particle <- subset(summarystats, filter == "Particle")
 
-#Calculate the log 2 ratio and create a new data frame
-oddsratio <- log2(particle$Mean_SeqAbund/free$Mean_SeqAbund) #creates a vector
-odds_ratio <- data.frame(free$Phylum, oddsratio) #combine the Phylum names with it
-odds_ratio <- rename(odds_ratio, c("free.Phylum" = "Phylum"))
-#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
-odds_ratio$colour <- ifelse(odds_ratio$oddsratio < 0, "firebrick1","steelblue")
-odds_ratio$hjust <- ifelse(odds_ratio$oddsratio > 0, 1.3, -0.3)
-#odds_ratio$Phylum <- factor(odds_ratio$Phylum, levels = odds_ratio$Phylum[order(odds_ratio$oddsratio)])
+
+```{r top PA vs FL, echo=FALSE, fig.width=8, fig.height = 10, warning = FALSE, fig.align='center'}
+### On to calculating the log two fold abundance for surface waters (limnion == "TOP")
+summarystats <- summarySE(data, measurevar = "SeqAbundance", groupvars = c("filter", "Phylum", "limnion"))
+names(summarystats)[5]<-"Mean_SeqAbund" #Change column name to represent what value really is
+free_top <- subset(summarystats, filter == "Free" & limnion == "Top")
+particle_top <- subset(summarystats, filter == "Particle" & limnion == "Top")
+#setdiff(particle_top$Phylum, free_top$Phylum) #have the same phyla in the same order 
+#dim(particle_top); dim(free_top)
+
+#Make a new data frame with the log2-fold ratio
+topPAFL_ratio <- log2(particle_top$Mean_SeqAbund/free_top$Mean_SeqAbund) #creates a vector with log2 values
+topPAFL_ratio <- data.frame(free_top$Phylum, topPAFL_ratio) #combine the Phylum names with it
+topPAFL_ratio <- rename(topPAFL_ratio, c("free_top.Phylum" = "Phylum"))
+#Help From to position labels on graph:  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+topPAFL_ratio$colour <- ifelse(topPAFL_ratio$topPAFL_ratio < 0, "firebrick1","steelblue")
+topPAFL_ratio$hjust <- ifelse(topPAFL_ratio$topPAFL_ratio > 0, 1.3, -0.3)
 
 #Let's delete Phyla from our data frame that are Inf, -Inf, or NaN
-Infs <- subset(odds_ratio, oddsratio == "Inf")
-neg_Infs <- subset(odds_ratio, oddsratio == "-Inf")
-#Now delete them.
-odds_ratio <- subset(odds_ratio, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" &
-                 Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi" &
-                 Phylum != "Fusobacteria" & Phylum != "Candidate_division_TM7")
+Infs <- subset(topPAFL_ratio, topPAFL_ratio == "Inf"); #Gemmatimonadetes, Candidate_division_SR1, Fusobacteria
+neg_Infs <- subset(topPAFL_ratio, topPAFL_ratio == "-Inf") #Epsilonproteobacteria, Candidate_division_BRC1, WCHB1-60 
+nan <- subset(topPAFL_ratio, topPAFL_ratio == "NaN") #Deferribacteres, Elusimicrobia, Thermotogae, BD1-5, Candidate_division_OP11, Candidate_division_OP8, Candidate_division_TM7, Candidate_division_WS3, Dictyoglomi, Fibrobacteres, Tenericutes
 
-#Order by oddsratio!
-#odds_ratio <- odds_ratio[with(odds_ratio, order(-oddsratio)),] #doesn't work right!!!!
-odds_ratio$Phylum <- factor(odds_ratio$Phylum, levels = odds_ratio$Phylum[order(odds_ratio$oddsratio)])
+#Now delete them.
+topPAFL_sub <- subset(topPAFL_ratio, Phylum != "Gemmatimonadetes" & Phylum != "Candidate_division_SR1" &
+                 Phylum != "Fusobacteria" & Phylum != "Epsilonproteobacteria" &
+                 Phylum != "Candidate_division_BRC1" & Phylum != "WCHB1-60" & Phylum != "Deferribacteres" & 
+                 Phylum != "Elusimicrobia" & Phylum != "Thermotogae" & Phylum != "BD1-5" &
+                 Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_OP8" &
+                 Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fibrobacteres" & Phylum != "Tenericutes")
+
+#Order by ratio!
+topPAFL_sub$Phylum <- factor(topPAFL_sub$Phylum, levels = topPAFL_sub$Phylum[order(topPAFL_sub$topPAFL_ratio)])
 
 
 #  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
-ratio_plot <- ggplot(odds_ratio, aes(y=oddsratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+topPAFL_plot <- ggplot(topPAFL_sub, aes(y=topPAFL_ratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
   geom_bar(stat="identity", position=position_dodge(), colour = "black") +
-  geom_text(aes(y=0, fill = colour)) + theme_bw() + ylim(-4.5,3.5) +
-  coord_flip() + ggtitle("Particle-Association vs. Free-Living") + 
-  labs(y = "Log2 Abundance", x = "") + scale_x_discrete(breaks = NULL) +
-  scale_fill_manual(name  ="", breaks=c("firebrick1", "steelblue"), 
-                    labels=c("More Abundant in Free-Water", "More Abundant in Particles"),
-                    values = c("royalblue","violetred")) +
+  geom_text(aes(y=0, fill = colour)) + theme_bw() + ylim(-6,3.5) +
+  annotate("text", label = "A", x = 24.5, y = -6, size = 14, colour = "black", face = "bold") +
+  coord_flip() + ggtitle("Surface Waters: Particle-Association vs. Free-Living") + 
+  labs(y = "Log2-Fold Abundance Ratio", x = "") + scale_x_discrete(breaks = NULL) +
+  scale_fill_manual(name  ="", breaks=c("steelblue", "firebrick1"), 
+                    labels=c("More Abundant in Particles", "More Abundant in Free-Water"),
+                    values = c("mediumblue", "violetred")) +
   theme(axis.title.x = element_text(face="bold", size=16),
         axis.text.x = element_text(angle=0, colour = "black", size=14),
         axis.text.y = element_text(colour = "black", size=14),
         axis.title.y = element_text(face="bold", size=16),
-        plot.title = element_text(face="bold", size = 20),
+        plot.title = element_text(face="bold", size = 16),
         legend.title = element_text(size=12, face="bold"),
         legend.text = element_text(size = 12),
-        legend.justification=c(1,0), legend.position=c(1,0.6)); 
+        legend.justification=c(1,0), legend.position=c(0.4, 0.4)); 
 
 
-#Use a non-parametric test pairwise test = Pairwise Wilcoxon Test.
-#Null Hypothesis:  The sequence abundance of particle and free living are the same (= to 0).
-#Alternative Hypothesis:  The seq abundance of particle and free are different.
-# If P is less than 0.05 then we reject the null hypothesis.
-#wilcox.test(particle, free)
+# Use a non-parametric test pairwise test = Pairwise Wilcoxon Test.
+      # Null Hypothesis:  The sequence abundance of particle and free living are the same (= to 0).
+      # Alternative Hypothesis:  The seq abundance of particle and free are different.
+  # If P is less than 0.05 then we reject the null hypothesis.
+# wilcox.test(particle, free)
 
 #To run a wilcox.test we can't just compare means -> we have to compare the distributions of our data
 #To get the distributions:
-dist <- subset(data, select = c("Phylum", "SeqAbundance", "filter", "sample")) #Get distributions from original file
-
+dist <- subset(data, select = c("Phylum", "SeqAbundance", "filter", "sample", "limnion")) #Get distributions from original file
+top_dist <- subset(dist, limnion == "Top")
+                   
 #Let's make sure that all of the sample names are the same for particles as they are for frees
 #This way we can check for what samples are missing, I first have to change the names of the samples to be the same
-dist$sample2 <- gsub("3um", "", dist$sample) #create new column with substitute nothing for "3um"
-dist$sample = NULL   #delete old column
-names(dist)[4]<-"sample" #give original name again
-dist$sample <- as.factor(dist$sample)
-#Have the same sample name now
+top_dist$sample2 <- gsub("3um", "", top_dist$sample) #create new column with substitute nothing for "3um"
+top_dist$sample = NULL   #delete old column
+names(top_dist)[5]<-"sample" #give original name again
+top_dist$sample <- as.factor(top_dist$sample)
+#Have the same sample name now!!
 
 #Get the distributions of the data for each factor.
-free_dist <- subset(dist, filter == "Free") #Make a free-living dist
-part_dist <- subset(dist, filter == "Particle") #Make a particle-associated dist
-#dim(free_dist); dim(part_dist) #They have different dims - time to fix this!
+top_free_dist <- subset(top_dist, filter == "Free") #Make a free-living dist
+top_part_dist <- subset(top_dist, filter == "Particle") #Make a particle-associated dist
+#dim(top_free_dist); dim(top_part_dist) #They have the same dims!
+#intersect(top_free_dist$sample, top_part_dist$sample)
 
 #What samples are missing from each data set
-sux <- setdiff(free_dist$sample, part_dist$sample); 
-this_sux <- setdiff(part_dist$sample, free_dist$sample); 
+sux <- setdiff(top_free_dist$sample, top_part_dist$sample); 
+this_sux <- setdiff(top_part_dist$sample, top_free_dist$sample); 
 
 #Remove the above non-duplicate and duplicate samples that we found with sux and this_sux
 #dim(free_dist); dim(part_dist) 
-free_dist <- subset(free_dist, sample != "BASE2" & sample != "LONE1" & sample != "LONE2" & sample != "LONH2")
-part_dist<- subset(part_dist, sample != "BSTE2" & sample !="GULH1" & sample !="LEEE1" & sample !="SIXE1" & sample !="SIXH2")
-#dim(free_dist); dim(part_dist) # I'm so happy!!!
+topfree <- subset(top_free_dist, sample != "BASE2" & sample != "LONE1" & sample != "LONE2") #sux
+toppart <- subset(top_part_dist, sample != "BSTE2" & sample !="LEEE1" & sample !="SIXE1") #this_sux
+#dim(topfree); dim(toppart) # I'm so happy!!!
 
 #We should also remove the phyla that gave us Inf, -Inf, or NaN from our log2 fold ratio
-free_dist <- subset(free_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
-part_dist <- subset(part_dist, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi")
-#dim(free_dist); dim(part_dist) # Good
+topfree2 <- subset(topfree, Phylum != "Gemmatimonadetes" & Phylum != "Candidate_division_SR1" &
+                 Phylum != "Fusobacteria" & Phylum != "Epsilonproteobacteria" &
+                 Phylum != "Candidate_division_BRC1" & Phylum != "WCHB1-60" & Phylum != "Deferribacteres" & 
+                 Phylum != "Elusimicrobia" & Phylum != "Thermotogae" & Phylum != "BD1-5" &
+                 Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_OP8" &
+                 Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fibrobacteres" & Phylum != "Tenericutes")
+toppart2 <- subset(toppart, Phylum != "Gemmatimonadetes" & Phylum != "Candidate_division_SR1" &
+                 Phylum != "Fusobacteria" & Phylum != "Epsilonproteobacteria" &
+                 Phylum != "Candidate_division_BRC1" & Phylum != "WCHB1-60" & Phylum != "Deferribacteres" & 
+                 Phylum != "Elusimicrobia" & Phylum != "Thermotogae" & Phylum != "BD1-5" &
+                 Phylum != "Candidate_division_OP11" & Phylum != "Candidate_division_OP8" &
+                 Phylum != "Candidate_division_TM7" & Phylum != "Candidate_division_WS3" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fibrobacteres" & Phylum != "Tenericutes")
+#dim(topfree2); dim(toppart2) # Good
 
 ##Make a vector of all the names of the Phyla in our samples
-phylumlist_free<-as.character(unique(free_dist$Phylum))
-phylumlist_part<-unique(part_dist$Phylum)
+phylumlist_topfree<-as.character(unique(topfree2$Phylum))
+phylumlist_toppart<-unique(toppart2$Phylum)
 #setdiff(phylumlist_free, phylumlist_part)
-phylumlist <- phylumlist_free
+phylumlist_top <- phylumlist_topfree
 
 #Make data frame filled with NAs to hold results inside of
-wresults<-data.frame(matrix(NA,length(phylumlist),2))
-names(wresults) <- c("Phylum", "P_Value")
+top_results<-data.frame(matrix(NA,length(phylumlist_top),2))
+names(top_results) <- c("Phylum", "P_Value")
 
-for(i in 1:length(phylumlist)){
-  free_sub<- subset(free_dist, Phylum == phylumlist[i])
-  part_sub<- subset(part_dist, Phylum == phylumlist[i])
-  wilcox <- wilcox.test(part_sub$SeqAbundance, free_sub$SeqAbundance, paired = TRUE)
-  wresults[i,1]<-phylumlist[i]
-  wresults[i,2]<-wilcox$p.value
+for(i in 1:length(phylumlist_top)){
+  free_sub_top <- subset(topfree2, Phylum == phylumlist_top[i]) #free phylum i
+  part_sub_top <- subset(toppart2, Phylum == phylumlist_top[i]) #particle phylum i
+  wilcox <- wilcox.test(part_sub_top$SeqAbundance, free_sub_top$SeqAbundance, paired = TRUE) # do a wilcoxon test on phylum i free vs. particle
+  top_results[i,1]<-phylumlist_top[i] #put the name of the phylum in the table
+  top_results[i,2]<-wilcox$p.value #put the wilcoxon p value in the table. 
 }
-# warnings()
 
-#We have to bonferroni correct because we ran 37 tests --> some are significant when they shouldn't be!
-num_tests <- length(unique(wresults$Phylum))
-wresults$Bonferroni_P<-wresults$P_Value/num_tests
-P_cutoff <- 0.05/length(wresults$Phylum)
-#length(wresults$Bonferroni_P[wresults$Bonferroni_P<P_cutoff])
-sigresults<-subset(wresults,Bonferroni_P<P_cutoff)
-
-
-library(grid)
-pushViewport(viewport(layout = grid.layout(1, 2)))
-print(abund_plot, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(ratio_plot , vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+#We have to bonferroni correct because we ran 25 tests --> some are significant when they shouldn't be!
+top_num_tests <- length(unique(top_results$Phylum)) #calculate the number of tests
+top_results$Bonferroni_P<-top_results$P_Value/top_num_tests #calculate the bonferonni corrected P
+topP_cutoff <- 0.05/length(top_results$Phylum) # Bonferonni Signicance value
+top_sigresults<-subset(top_results,Bonferroni_P<topP_cutoff)  #These are all the significant results with Bonferonni Correction!
 ```
 
 
+
+
+
+```{r bottom PA vs FL comparison, echo=FALSE, fig.width=8, fig.height = 11, warning = FALSE, fig.align='center'}
+### On to calculating the log two fold abundance for surface waters (limnion == "BOTTOM")
+free_bot <- subset(summarystats, filter == "Free" & limnion == "Bottom")
+particle_bot <- subset(summarystats, filter == "Particle" & limnion == "Bottom")
+#setdiff(particle_bot$Phylum, free_bot$Phylum) #have the same phyla in the same order 
+#dim(particle_bot); dim(free_bot)
+
+#Make a new data frame with the log2-fold ratio
+botPAFL_ratio <- log2(particle_bot$Mean_SeqAbund/free_bot$Mean_SeqAbund) #creates a vector with log2 values
+botPAFL_ratio <- data.frame(free_bot$Phylum, botPAFL_ratio) #combine the Phylum names with it
+botPAFL_ratio <- rename(botPAFL_ratio, c("free_bot.Phylum" = "Phylum"))
+botPAFL_ratio <- rename(botPAFL_ratio, c("botPAFL_ratio" = "Ratio"))
+#Help From to position labels on graph:  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+botPAFL_ratio$colour <- ifelse(botPAFL_ratio$Ratio < 0, "firebrick1","steelblue")
+botPAFL_ratio$hjust <- ifelse(botPAFL_ratio$Ratio > 0, 1.3, -0.3)
+#topPAFL_ratio$Phylum <- factor(odds_ratio$Phylum, levels = odds_ratio$Phylum[order(odds_ratio$oddsratio)])
+
+#Let's delete Phyla from our data frame that are Inf, -Inf, or NaN
+Infs <- subset(botPAFL_ratio, Ratio == "Inf"); #Thermotogae, Candidate_division_OP11, Candidate_division_OP8, Dictyoglomi, Fusobacteria
+neg_Infs <- subset(botPAFL_ratio, Ratio == "-Inf") #Chlamydiae, Gemmatimonadetes, Candidate_division_TM7 
+nan <- subset(botPAFL_ratio, Ratio == "NaN") #SPOTSOCT00m83
+
+#Now delete them.
+botPAFL_sub <- subset(botPAFL_ratio, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" &
+                 Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fusobacteria" & Phylum != "Chlamydiae" & Phylum != "Gemmatimonadetes" & 
+                 Phylum != "Candidate_division_TM7" & Phylum != "SPOTSOCT00m83")
+
+#Order by oddsratio!
+#odds_ratio <- odds_ratio[with(odds_ratio, order(-oddsratio)),] #doesn't work right!!!!
+botPAFL_sub$Phylum <- factor(botPAFL_sub$Phylum, levels = botPAFL_sub$Phylum[order(botPAFL_sub$Ratio)])
+
+
+#  http://learnr.wordpress.com/2009/06/01/ggplot2-positioning-of-barplot-category-labels/
+botPAFL_plot <- ggplot(botPAFL_sub, aes(y=Ratio, x = Phylum, label = Phylum, hjust=hjust, fill = colour)) + 
+  geom_bar(stat="identity", position=position_dodge(), colour = "black") +
+  geom_text(aes(y=0, fill = colour)) + theme_bw() + ylim(-4,4) + 
+  annotate("text", label = "B", x = 32, y = -4, size = 14, colour = "black", face = "bold") + 
+  coord_flip() + ggtitle("Bottom Waters: Particle-Association vs. Free-Living") + 
+  labs(y = "Log2-Fold Abundance Ratio", x = "") + scale_x_discrete(breaks = NULL) +
+  scale_fill_manual(name  ="", breaks=c("steelblue", "firebrick1"), 
+                    labels=c("More Abundant in Particles", "More Abundant in Free-Water"),
+                    values = c("mediumblue", "violetred")) +
+  theme(axis.title.x = element_text(face="bold", size=16),
+        axis.text.x = element_text(angle=0, colour = "black", size=14),
+        axis.text.y = element_text(colour = "black", size=14),
+        axis.title.y = element_text(face="bold", size=16),
+        plot.title = element_text(face="bold", size = 16),
+        legend.title = element_text(size=12, face="bold"),
+        legend.text = element_text(size = 12),
+        legend.justification=c(1,0), legend.position=c(0.4, 0.4)); 
+
+
+# Use a non-parametric test pairwise test = Pairwise Wilcoxon Test.
+      # Null Hypothesis:  The sequence abundance of particle and free living are the same (= to 0).
+      # Alternative Hypothesis:  The seq abundance of particle and free are different.
+  # If P is less than 0.05 then we reject the null hypothesis.
+# wilcox.test(particle, free)
+
+#To run a wilcox.test we can't just compare means -> we have to compare the distributions of our data
+#To get the distributions:
+bot_dist <- subset(dist, limnion == "Bottom")
+                   
+#Let's make sure that all of the sample names are the same for particles as they are for frees
+#This way we can check for what samples are missing, I first have to change the names of the samples to be the same
+bot_dist$sample2 <- gsub("3um", "", bot_dist$sample) #create new column with substitute nothing for "3um"
+bot_dist$sample = NULL   #delete old column
+names(bot_dist)[5]<-"sample" #give original name again
+bot_dist$sample <- as.factor(bot_dist$sample)
+#Have the same sample name now!!
+
+#Get the distributions of the data for each factor.
+bot_free_dist <- subset(bot_dist, filter == "Free") #Make a free-living dist
+bot_part_dist <- subset(bot_dist, filter == "Particle") #Make a particle-associated dist
+#dim(top_free_dist); dim(top_part_dist) #They have the same dims!
+#intersect(top_free_dist$sample, top_part_dist$sample)
+
+#What samples are missing from each data set
+sux <- setdiff(bot_free_dist$sample, bot_part_dist$sample); 
+this_sux <- setdiff(bot_part_dist$sample, bot_free_dist$sample); 
+
+#Remove the above non-duplicate and duplicate samples that we found with sux and this_sux
+#dim(free_dist); dim(part_dist) 
+botfree <- subset(bot_free_dist, sample != "LONH2") #sux
+botpart <- subset(bot_part_dist, sample != "GULH1" & sample !="SIXH2") #this_sux
+#dim(botfree); dim(botpart) # I'm so happy!!!
+
+#We should also remove the phyla that gave us Inf, -Inf, or NaN from our log2 fold ratio
+botfree2 <- subset(botfree, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" &
+                 Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fusobacteria" & Phylum != "Chlamydiae" & Phylum != "Gemmatimonadetes" & 
+                 Phylum != "Candidate_division_TM7" & Phylum != "SPOTSOCT00m83")
+botpart2 <- subset(botpart, Phylum != "Thermotogae" & Phylum != "Candidate_division_OP11" &
+                 Phylum != "Candidate_division_OP8" & Phylum != "Dictyoglomi" &
+                 Phylum != "Fusobacteria" & Phylum != "Chlamydiae" & Phylum != "Gemmatimonadetes" & 
+                 Phylum != "Candidate_division_TM7" & Phylum != "SPOTSOCT00m83")
+#dim(botfree2); dim(botpart2) # Good
+
+##Make a vector of all the names of the Phyla in our samples
+phylumlist_botfree<-as.character(unique(botfree2$Phylum))
+phylumlist_botpart<-unique(botpart2$Phylum)
+#setdiff(phylumlist_free, phylumlist_part)
+phylumlist_bot <- phylumlist_botfree
+
+#Make data frame filled with NAs to hold results inside of
+bot_results<-data.frame(matrix(NA,length(phylumlist_bot),2))
+names(bot_results) <- c("Phylum", "P_Value")
+
+for(i in 1:length(phylumlist_bot)){
+  free_sub_bot <- subset(botfree2, Phylum == phylumlist_bot[i])  #free phylum i
+  part_sub_bot <- subset(botpart2, Phylum == phylumlist_bot[i])  #particle phylum i
+  wilcox <- wilcox.test(part_sub_bot$SeqAbundance, free_sub_bot$SeqAbundance, paired = TRUE) # do a wilcoxon test on phylum i free vs. particle
+  bot_results[i,1]<-phylumlist_bot[i] #put the name of the phylum in the table
+  bot_results[i,2]<-wilcox$p.value #put the wilcoxon p value in the table. 
+}
+
+#We have to bonferroni correct because we ran 33 tests --> some are significant when they shouldn't be!
+bot_num_tests <- length(unique(bot_results$Phylum))  #calculate the number of tests
+bot_results$Bonferroni_P<-bot_results$P_Value/bot_num_tests #calculate the bonferonni corrected P
+botP_cutoff <- 0.05/length(bot_results$Phylum) # Bonferonni Signicance value
+bot_sigresults<-subset(bot_results,Bonferroni_P<botP_cutoff)  #These are all the significant results with Bonferonni Correction!
+```
+
+#### Comparing the Surface and Bottom Water Particle-Associated versus Free-Living Bacterial Community Composition 
+```{r sidebyside log2-fold abundance ratio, echo = FALSE, fig.align='center', fig.height=12, fig.width= 18, message=FALSE}
+multiplot(topPAFL_plot, botPAFL_plot, cols = 2)
+```
+
+_**Figure 2:**  The Log2-Fold Abundance Ratio of bacterial phyla in surface and bottom waters.  Positive values indicate that a phylum is more abundant in particles while negative values indicates a phylum is more abundant in free-water.  Signifant _  
+
+Figure 1a corresponds to the significance values presented in table 1 (below).  13 of the 25 phyla present in the surface waters of the lakes that I sampled are significantly different in particle-associated and free-living fractions.  
+
+On the other hand, Figure 1b corresponds to table 2 (below).  20 of 33 phyla present in the bottom waters of the lakes that I sampled are significantly different in particle-associated and free-living fractions.  
+
+####Overlapping Significance Between Surface and Bottom Waters
+```{r signifcant overlap, echo= FALSE}
+overlap_sigs <- intersect(top_sigresults$Phylum, bot_sigresults$Phylum)
+```
+
+_Betaproteobacteria, TA18, Actinobacteria, Armatimonadetes, Candidate Division OD1, Candidate Division OP3, Cyanobacteria, NPL-UPA2,_ and _Planctomycetes_ are significantally different between particle-association and free-living in **both** surface and bottom waters.  
+
+
 ```{r echo = FALSE}
+#From GitHub:  https://gist.github.com/rmflight/3858973
 tableCat <- function(inFrame) {
     outText <- paste(names(inFrame), collapse = " | ")
     outText <- c(outText, paste(rep("---", ncol(inFrame)), collapse = " | "))
@@ -244,13 +479,48 @@ tableCat <- function(inFrame) {
 }
 ```
 
-```{r echo=FALSE, results='asis'}
-sigresults <- tableCat(sigresults)
-sigresults <- cat(sigresults, sep = "\n")
+####Surface Water Significant results: Figure 1a 
+**Table 1:** Ran `r top_num_tests` Paired Wilcoxon Tests with a Bonferonni Corrected P-value Cut-Off of `r topP_cutoff`  
+
+```{r echo = FALSE, results='asis'} 
+test <- top_sigresults 
+colnames(test) <- c("Phylum", "Original P-Value", "Bonferroni P-Value")
+test <- tableCat(test)
+test <- cat(test, sep = "\n")
+```
+
+####Bottom Water Significant results:  Figure 1b
+**Table 2: **Ran `r bot_num_tests` Paired Wilcoxon Tests with a Bonferonni Corrected P-value Cut-Off of `r botP_cutoff`  
+
+```{r echo = FALSE, results='asis', fig.align= 'center'} 
+test2 <- bot_sigresults 
+colnames(test2) <- c("Phylum", "Original P-Value", "Bonferroni P-Value")
+test2 <- tableCat(test2)
+test2 <- cat(test2, sep = "\n")
 ```
 
 
 
+
+###Conclusions
+1.  What bacterial phyla are the dominant members of the overall freshwater lake community that I sampled?
+      + **Conclusion:**  5 most abundant Phyla:  _Bacteriodetes, Cyanobacteria, Verrucomicrobia, Betaproteobacteria_ and _Actinobacteria._
+2.  Do particle-associated bacteria differ from free-living bacteria in **surface** waters?  
+      + **Hypothesis:** Particle-associated and free-living bacteria **do not** significantly differ in surface waters.  
+        + **Conclusion:** 13 of the 25 phyla in the surface waters differ significantly between particle-associated and free-living fractions.     
+3.  Do particle-associated bacteria differ from free-living bacteria in **bottom** waters?
+      + **Hypothesis:** Particle-associated and free-living bacteria **do** significantly differ in surface waters.  
+        + **Conclusion:** 20 of the 33 phyla in the surface waters differ significantly between particle-associated and free-living fractions.    
+
+**Overlap between the surface and bottom waters:** `r length(overlap_sigs)` phyla are significant in both the surface and bottom waters.  Including:_Betaproteobacteria, TA18, Actinobacteria, Armatimonadetes, Candidate Division OD1, Candidate Division OP3, Cyanobacteria, NPL-UPA2,_ and _Planctomycetes_ are significantally different between particle-association and free-living in **both** surface and bottom waters.  
+
+
+###References
++ Azam, F. (1998)  Microbial control of oceanic carbon flux: the plot thickens, _Science 280(5364):_ 694-696.  
++ Bižić-Ionescu, M., Zeder, M., Ionescu, D., Orlić, S., Fuchs, B.M., Grossart, H.P., and R. Amann (2014)  Compariston of bacterial communities on limnic versus coastal marine particles reveals profound differences in colonization, _Environmental Microbiology:_ 1-15. 
++ Ganesh, S., Parris, D.J., DeLong, E.F., and F. J. Stewart. (2014) Metagenomic analysis of size-fractionated picoplankton in a marine oxygen minimum zone, _The International Society for Microbial Ecology Journal 8:_ 187 – 211.  
++ Grossart, H.P. (2010) Ecological consequences of bacterioplankton lifestyles: changes in concepts are needed, _Environmental Microbiology Reports 2:_ 706-714.  
++ Newton, R.J., Jones, S.E., Eiler, A., McMahon, K.D., and S. Bertilsson. (2011) A guide to the natural history of freshwater lake bacteria, _Microbiology and Molecular Biology Reviews 75(1):_ 14-49.  
 
 
 
